@@ -2,29 +2,54 @@
 import express from 'express';
 import cors from 'cors';
 import morgan from 'morgan';
-import taskRouter from './src/routes/taskRoutes.js';
-import { securityHeaders } from './src/middleware/security.js';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-dotenv.config();
+
+import taskRoutes from './routes/taskRoutes.js';
+import { errorHandler } from './middleware/errorHandler.js';
+
+dotenv.config(); // Load .env
 
 const app = express();
-const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
-app.use(morgan('dev'));
+// Security Headers
+app.use(helmet());
+
+// Rate Limiting (100 requests per 15 min per IP)
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: 'Too many requests from this IP. Please try again later.'
+});
+app.use(limiter);
+
+// JSON parser
 app.use(express.json());
-app.use(securityHeaders);
+
+// CORS - allow only specific origin in production
+app.use(cors({
+  origin: '*', // Later change '*' to your frontend URL (like http://localhost:3000 or deployed frontend)
+}));
+
+// Logging
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
 
 // Routes
-app.use('/api/tasks', taskRouter);
+app.use('/api/tasks', taskRoutes);
 
-// Error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'Internal Server Error' });
+// Health check
+app.get('/', (req, res) => {
+  res.send('✅ TaskFlow API is running');
 });
 
+// Error Handler (last middleware)
+app.use(errorHandler);
+
+// Start server
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`✅ TaskFlow API running on port ${PORT}`);
+  console.log(`✅ Server running on http://localhost:${PORT}`);
 });
